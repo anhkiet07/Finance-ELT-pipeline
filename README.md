@@ -12,25 +12,7 @@ Target stocks: Vietnamese bank tickers **VCB, TCB, ACB, BID, LPB**, sourced via 
 
 Data flows through three layers, following a standard raw → staging → mart modeling approach:
 
-```mermaid
-flowchart LR
-    subgraph Extract & Load
-        A[vnstock API<br/>Stock prices] --> C
-        B[FX rate source<br/>USD/VND] --> C
-        C[(Raw layer<br/>Postgres<br/>original response, untouched)]
-    end
-
-    subgraph Transform - dbt
-        C --> D[(Staging layer<br/>typed, cleaned, deduped)]
-        D --> E[(Mart layer<br/>business-ready tables<br/>price + FX joined)]
-    end
-
-    E --> F[BI layer<br/>Metabase / Power BI<br/>planned]
-
-    G[Airflow<br/>orchestration] -.schedules.-> A
-    G -.schedules.-> B
-    G -.triggers.-> D
-```
+![Architecture](docs/architecture.png)
 
 - **Raw** — stores the original API response as-is (minimal transformation), for traceability and re-processing.
 - **Staging** — dbt models that clean data types, deduplicate records, and standardize column names/formats.

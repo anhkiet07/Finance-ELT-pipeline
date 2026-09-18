@@ -22,15 +22,15 @@ Data flows through three layers, following a standard raw → staging → mart m
 
 | Layer | Tool | Status |
 |---|---|---|
-| Orchestration | Apache Airflow | Planned |
+| Orchestration | Apache Airflow | In progress |
 | Transformation | dbt-core | Planned |
 | Data ingestion | Python, [vnstock](https://github.com/thinh-vu/vnstock) | Planned |
-| Warehouse | PostgreSQL | Planned |
-| Local environment | Docker Compose | Planned |
+| Warehouse | PostgreSQL | In progress |
+| Local environment | Docker Compose | In progress |
 | BI / Visualization | Metabase or Power BI | Planned |
 | CI/CD | GitHub Actions | Planned |
 
-The repository is at its very first stage: only the license and project documentation exist so far. No implementation code has been written yet — the table above reflects the intended stack rather than what is currently installed or running.
+The repository is at an early stage: the Docker Compose setup for local development (Airflow + Postgres) has landed, but ingestion, transformation, and BI layers are not implemented yet.
 
 ## Repository Structure
 
@@ -47,7 +47,33 @@ finance-elt-pipeline/
 
 ## Running Locally
 
-Not available yet. A `docker-compose.yml` bringing up Airflow, Postgres, and dbt for local development has not been created. This section will be filled in once the Docker Compose setup lands.
+A `docker/docker-compose.yml` brings up the local development environment:
+
+- **airflow-db** — Postgres instance storing Airflow's metadata (port `5433`)
+- **warehouse-db** — Postgres instance acting as the data warehouse (port `5434`)
+- **airflow-init** — one-off service that runs `airflow db migrate` and creates the admin user
+- **airflow-webserver** — Airflow UI (port `8080`)
+- **airflow-scheduler** — Airflow scheduler process
+
+Before starting, create a `docker/.env` file with the following variables:
+
+```
+AIRFLOW_DB_USER=
+AIRFLOW_DB_PASSWORD=
+AIRFLOW_DB_NAME=
+AIRFLOW_FERNET_KEY=
+AIRFLOW_ADMIN_USER=
+AIRFLOW_ADMIN_PASSWORD=
+AIRFLOW_ADMIN_EMAIL=
+```
+
+Then start the stack from the `docker/` directory:
+
+```
+docker compose up -d
+```
+
+The Airflow UI will be available at [http://localhost:8080](http://localhost:8080). dbt is not wired into the Compose setup yet.
 
 ## Current Status & Roadmap
 
@@ -57,7 +83,7 @@ Not available yet. A `docker-compose.yml` bringing up Airflow, Postgres, and dbt
 - [x] Scaffold project structure (`dags/`, `dbt/`, `docker/`, `scripts/`, `docs/`)
 
 **Phase 1 — Environment & ingestion**
-- [ ] Set up Docker Compose (Airflow + Postgres)
+- [x] Set up Docker Compose (Airflow + Postgres)
 - [ ] Build ingestion scripts for stock prices (vnstock) and USD/VND FX rate
 - [ ] Load raw responses into the Postgres raw layer
 - [ ] Orchestrate ingestion with an Airflow DAG

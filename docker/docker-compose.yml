@@ -23,15 +23,15 @@ services:
         image: postgres:16-alpine
         container_name: airflow-db
         environment:
-            POSTGRES_USER: airflow
-            POSTGRES_PASSWORD: airflow
-            POSTGRES_DB: airflow
+            POSTGRES_USER: ${AIRFLOW_DB_USER}
+            POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD}
+            POSTGRES_DB: ${AIRFLOW_DB_NAME}
         volumes:
             - airflow-db-data:/var/lib/postgresql/data
         ports:
             - "5433:5432"
         healthcheck:
-            test: ["CMD", "pg_isready", "-U", "airflow"]
+            test: ["CMD", "pg_isready", "-U", "${AIRFLOW_DB_USER}"]
             interval: 5s
             retries: 5
     
@@ -39,15 +39,15 @@ services:
         image: postgres:16-alpine
         container_name: warehouse-db
         environment:
-            POSTGRES_USER: warehouse
-            POSTGRES_PASSWORD: warehouse
-            POSTGRES_DB: warehouse
+            POSTGRES_USER: ${WAREHOUSE_DB_USER}
+            POSTGRES_PASSWORD: ${WAREHOUSE_DB_PASSWORD}
+            POSTGRES_DB: ${WAREHOUSE_DB_NAME}
         volumes:
             - warehouse-db-data:/var/lib/postgresql/data
         ports:
             - "5434:5432"
         healthcheck:
-            test: ["CMD", "pg_isready", "-U", "warehouse"]
+            test: ["CMD", "pg_isready", "-U", "${WAREHOUSE_DB_USER}"]
             interval: 5s
             retries: 5
 

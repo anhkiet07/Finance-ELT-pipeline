@@ -24,24 +24,24 @@ Data flows through three layers, following a standard raw → staging → mart m
 |---|---|---|
 | Orchestration | Apache Airflow | In progress |
 | Transformation | dbt-core | Planned |
-| Data ingestion | Python, [vnstock](https://github.com/thinh-vu/vnstock) | Planned |
+| Data ingestion | Python, [vnstock](https://github.com/thinh-vu/vnstock) | In progress |
 | Warehouse | PostgreSQL | In progress |
 | Local environment | Docker Compose | In progress |
 | BI / Visualization | Metabase or Power BI | Planned |
 | CI/CD | GitHub Actions | Planned |
 
-The repository is at an early stage: the Docker Compose setup for local development (Airflow + Postgres) has landed, but ingestion, transformation, and BI layers are not implemented yet.
+The repository is still at an early stage: the Docker Compose setup for local development (Airflow + Postgres) is in place, and a standalone ingestion script loads stock prices and the USD/VND rate into the warehouse's raw tables. Airflow orchestration, dbt transformation, and the BI layer are not implemented yet.
 
 ## Repository Structure
 
-The directory skeleton below is in place, but each folder is currently empty (tracked with `.gitkeep`) — implementation has not started yet.
+`scripts/` and `docker/` contain working code; `dags/` and `dbt/` are still empty placeholders (tracked with `.gitkeep`).
 
 ```
 finance-elt-pipeline/
-├── dags/       # Airflow DAGs orchestrating extraction and dbt runs
-├── dbt/        # dbt project: staging and mart models, tests, docs
-├── docker/     # Dockerfiles and Docker Compose setup for local development
-├── scripts/    # Standalone extraction/ingestion scripts (e.g. vnstock, FX pulls)
+├── dags/       # Airflow DAGs orchestrating extraction and dbt runs (not started)
+├── dbt/        # dbt project: staging and mart models, tests, docs (not started)
+├── docker/     # Docker Compose setup for local development (Airflow + Postgres)
+├── scripts/    # Standalone ingestion script (vnstock stock prices, VCB USD/VND rate)
 └── docs/       # Project documentation, design notes, diagrams
 ```
 
@@ -65,6 +65,9 @@ AIRFLOW_FERNET_KEY=
 AIRFLOW_ADMIN_USER=
 AIRFLOW_ADMIN_PASSWORD=
 AIRFLOW_ADMIN_EMAIL=
+WAREHOUSE_DB_USER=
+WAREHOUSE_DB_PASSWORD=
+WAREHOUSE_DB_NAME=
 ```
 
 Then start the stack from the `docker/` directory:
@@ -75,6 +78,23 @@ docker compose up -d
 
 The Airflow UI will be available at [http://localhost:8080](http://localhost:8080). dbt is not wired into the Compose setup yet.
 
+### Running the ingestion script
+
+`scripts/ingest_stock.py` reads the warehouse credentials from `docker/.env` (via a relative path, so run it from the `scripts/` directory) and connects to `warehouse-db` on `localhost:5434`:
+
+```
+cd scripts
+pip install -r requirements.txt
+python ingest_stock.py
+```
+
+It creates two raw tables if they do not exist and upserts into them, so re-running is safe:
+
+- `raw_stock_price` — daily OHLCV for VCB, TCB, ACB, BID, LPB (unique on `ticker, trade_date`)
+- `raw_fx_rate` — USD/VND sell rate from the Vietcombank exchange-rate feed (unique on `rate_date`)
+
+The stock date range is currently hardcoded in the script, and the FX feed only returns the current day's rate, so there is no historical FX backfill yet.
+
 ## Current Status & Roadmap
 
 **Phase 0 — Repository setup**
@@ -84,8 +104,9 @@ The Airflow UI will be available at [http://localhost:8080](http://localhost:808
 
 **Phase 1 — Environment & ingestion**
 - [x] Set up Docker Compose (Airflow + Postgres)
-- [ ] Build ingestion scripts for stock prices (vnstock) and USD/VND FX rate
-- [ ] Load raw responses into the Postgres raw layer
+- [x] Build ingestion script for stock prices (vnstock) and USD/VND FX rate (Vietcombank)
+- [x] Load raw data into the Postgres raw layer (`raw_stock_price`, `raw_fx_rate`, idempotent upserts)
+- [ ] Parameterize the script (date range / incremental loads instead of hardcoded dates) and add error handling
 - [ ] Orchestrate ingestion with an Airflow DAG
 
 **Phase 2 — Transformation**

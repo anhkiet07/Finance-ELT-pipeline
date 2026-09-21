@@ -6,14 +6,17 @@ import requests
 import xml.etree.ElementTree as ET
 from datetime import date
 
-load_dotenv(dotenv_path="../docker/.env")
+RUNNING_IN_AIRFLOW = os.path.exists("/opt/airflow")
+
+if not RUNNING_IN_AIRFLOW:
+    load_dotenv(dotenv_path="../docker/.env")
 
 DB_config = {
-    "host" : "localhost",
-    "port" : 5434,
-    "user" : os.getenv("WAREHOUSE_DB_USER"),
-    "password" : os.getenv("WAREHOUSE_DB_PASSWORD"),
-    "dbname" : os.getenv("WAREHOUSE_DB_NAME")
+    "host": "warehouse-db" if RUNNING_IN_AIRFLOW else "localhost",
+    "port": 5432 if RUNNING_IN_AIRFLOW else 5434,
+    "user": os.getenv("WAREHOUSE_DB_USER"),
+    "password": os.getenv("WAREHOUSE_DB_PASSWORD"),
+    "dbname": os.getenv("WAREHOUSE_DB_NAME"),
 }
 
 TICKERS = ["VCB", "TCB", "ACB", "BID", "LPB"]

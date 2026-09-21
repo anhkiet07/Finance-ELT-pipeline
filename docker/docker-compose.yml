@@ -2,7 +2,9 @@ version: "3.8"
 
 x-airflow-common:
   &airflow-common
-  image: apache/airflow:2.9.3
+  build: 
+    context: ..
+    dockerfile: docker/Dockerfile
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
@@ -10,10 +12,14 @@ x-airflow-common:
     AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
+    WAREHOUSE_DB_USER: ${WAREHOUSE_DB_USER}
+    WAREHOUSE_DB_PASSWORD: ${WAREHOUSE_DB_PASSWORD}
+    WAREHOUSE_DB_NAME: ${WAREHOUSE_DB_NAME}
   volumes:
     - ../dags:/opt/airflow/dags
     - ../logs:/opt/airflow/logs
     - ../plugins:/opt/airflow/plugins
+    - ../scripts:/opt/airflow/scripts
   depends_on:
     airflow-db:
       condition: service_healthy

@@ -2,6 +2,7 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from datetime import datetime
 import sys
+from airflow.operators.bash import BashOperator
 
 sys.path.append("/opt/airflow/scripts")
 
@@ -10,7 +11,7 @@ from ingest_stock import (
     create_raw_fx_table,
     fetch_stock_price,
     insert_stock_data,
-    fetch_fx_rate,
+    fetch_fx_rates,
     insert_fx_data,
     TICKERS,
     DB_config,
@@ -28,7 +29,7 @@ def run_ingest():
         df = fetch_stock_price(ticker, start_date="2026-09-01", end_date=datetime.today().strftime("%Y-%m-%d"))
         insert_stock_data(conn, df)
 
-    fx_data = fetch_fx_rate()
+    fx_data = fetch_fx_rates()
     insert_fx_data(conn, fx_data)
 
     conn.close()
@@ -46,3 +47,10 @@ with DAG(
         task_id="ingest_stock_and_fx",
         python_callable=run_ingest,
     )
+
+    dbt_run_task = BashOperator(
+        task_id="dbt_run",
+        bash_command="cd /opt/airflow/dbt && dbt run",
+    )
+
+    ingest_task >> dbt_run_task

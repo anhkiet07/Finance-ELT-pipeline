@@ -2,7 +2,7 @@ version: "3.8"
 
 x-airflow-common:
   &airflow-common
-  build: 
+  build:
     context: ..
     dockerfile: docker/Dockerfile
   environment:
@@ -15,11 +15,13 @@ x-airflow-common:
     WAREHOUSE_DB_USER: ${WAREHOUSE_DB_USER}
     WAREHOUSE_DB_PASSWORD: ${WAREHOUSE_DB_PASSWORD}
     WAREHOUSE_DB_NAME: ${WAREHOUSE_DB_NAME}
+    DBT_PROFILES_DIR: /opt/airflow/dbt/profiles
   volumes:
     - ../dags:/opt/airflow/dags
     - ../logs:/opt/airflow/logs
     - ../plugins:/opt/airflow/plugins
     - ../scripts:/opt/airflow/scripts
+    - ../dbt:/opt/airflow/dbt
   depends_on:
     airflow-db:
       condition: service_healthy

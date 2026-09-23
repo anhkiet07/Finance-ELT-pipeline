@@ -4,7 +4,7 @@ An end-to-end ELT (Extract–Load–Transform) pipeline for Vietnamese bank stoc
 
 ## Project Goal
 
-This project is a learning-by-building exercise that simulates a realistic data platform workflow: ingest public financial data, land it in a warehouse, model it through clean layers, and (eventually) surface it for BI consumption. The focus is on applying standard data engineering practices — orchestration, layered transformation, testing, and containerized local development — rather than on the financial data itself.
+This project is a learning-by-building exercise that simulates a realistic data platform workflow: ingest public financial data, land it in a warehouse, model it through clean layers, and surface it for BI consumption. The focus is on applying standard data engineering practices — orchestration, layered transformation, testing, and containerized local development — rather than on the financial data itself.
 
 Target stocks: Vietnamese bank tickers **VCB, TCB, ACB, BID, LPB**, sourced via the [vnstock](https://github.com/thinh-vu/vnstock) library, plus USD/VND exchange rate data.
 
@@ -27,10 +27,10 @@ Data flows through three layers, following a standard raw → staging → mart m
 | Data ingestion | Python, [vnstock](https://github.com/thinh-vu/vnstock) | In progress |
 | Warehouse | PostgreSQL | In progress |
 | Local environment | Docker Compose | In progress |
-| BI / Visualization | Metabase or Power BI | Planned |
+| BI / Visualization | Power BI | Connected to the mart layer |
 | CI/CD | GitHub Actions | In progress (dbt run + test on push/PR) |
 
-The repository is still at an early stage: the Docker Compose setup for local development (Airflow + Postgres) is in place, and an Airflow DAG runs daily to load stock prices and the USD/VND rate into the warehouse's raw tables and then build and test the dbt staging and mart models. A GitHub Actions workflow runs the dbt models and tests against a throwaway Postgres on every push and pull request. The BI layer is not implemented yet.
+The repository is still at an early stage: the Docker Compose setup for local development (Airflow + Postgres) is in place, and an Airflow DAG runs daily to load stock prices and the USD/VND rate into the warehouse's raw tables and then build and test the dbt staging and mart models. A GitHub Actions workflow runs the dbt models and tests against a throwaway Postgres on every push and pull request. Power BI connects to the warehouse to report on the mart layer, and dbt docs are generated for the models.
 
 ## Repository Structure
 
@@ -142,7 +142,27 @@ Tests are declared next to the models in `_staging__models.yml` and `_marts__mod
 - `stg_fx_rate` — `rate_date` `not_null` and `unique`; `usd_vnd_rate` `not_null`
 - `mart_stock_usd` — `ticker` `not_null`; `ticker, trade_date` unique together
 
-dbt docs have not been generated yet.
+#### dbt docs
+
+The model documentation and lineage graph are built with dbt docs:
+
+```
+cd dbt
+dbt docs generate
+dbt docs serve   # opens the docs site at http://localhost:8080 by default
+```
+
+If the Airflow UI is already running on port `8080`, use `dbt docs serve --port 8081`. The generated files go to `dbt/target/`, which is git-ignored.
+
+### Power BI
+
+Power BI Desktop connects to the warehouse Postgres from the host:
+
+- Server: `localhost:5434`, database: `WAREHOUSE_DB_NAME` from `docker/.env`
+- Credentials: `WAREHOUSE_DB_USER` / `WAREHOUSE_DB_PASSWORD`
+- Tables: the mart models (e.g. `mart_stock_usd`) in the warehouse
+
+The Docker stack must be running for Power BI to refresh.
 
 ### CI (GitHub Actions)
 
@@ -175,10 +195,10 @@ The CI never calls vnstock or the Vietcombank feed, so it is fast and determinis
 - [x] Build mart models (price + FX joins)
 - [x] Wire `dbt run` into the Airflow DAG after ingestion
 - [x] Add dbt tests (`not_null`, `unique`, `dbt_utils` composite keys) and run `dbt test` in the DAG
-- [ ] Generate dbt docs
+- [x] Generate dbt docs
 
 **Phase 3 — BI & CI/CD**
-- [ ] Connect Metabase or Power BI to the mart layer
+- [x] Connect Power BI to the mart layer
 - [x] Add GitHub Actions CI running `dbt run` + `dbt test` against fixture data
 - [ ] Add linting (e.g. SQLFluff, ruff) to CI
 

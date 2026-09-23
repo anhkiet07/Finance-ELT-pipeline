@@ -1,5 +1,7 @@
 # Finance ELT Pipeline — VN Stock & FX Data Pipeline
 
+[![CI](https://github.com/anhkiet07/Finance-ELT-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/anhkiet07/Finance-ELT-pipeline/actions/workflows/ci.yml)
+
 An end-to-end ELT (Extract–Load–Transform) pipeline for Vietnamese bank stock prices and USD/VND exchange rate data, built as a hands-on portfolio project for a Data Engineer role.
 
 ## Project Goal
@@ -22,15 +24,15 @@ Data flows through three layers, following a standard raw → staging → mart m
 
 | Layer | Tool | Status |
 |---|---|---|
-| Orchestration | Apache Airflow 2.9 | In progress (ingest → dbt run → dbt test DAG in place) |
-| Transformation | dbt-core (dbt-postgres, dbt_utils) | In progress (models + tests) |
-| Data ingestion | Python, [vnstock](https://github.com/thinh-vu/vnstock) | In progress |
-| Warehouse | PostgreSQL | In progress |
-| Local environment | Docker Compose | In progress |
+| Orchestration | Apache Airflow 2.9 | Done (daily ingest → dbt run → dbt test DAG) |
+| Transformation | dbt-core (dbt-postgres, dbt_utils) | Done (staging + mart models, tests, docs) |
+| Data ingestion | Python, [vnstock](https://github.com/thinh-vu/vnstock) | Working (dates still hardcoded) |
+| Warehouse | PostgreSQL | Done |
+| Local environment | Docker Compose | Done |
 | BI / Visualization | Power BI | Connected to the mart layer |
-| CI/CD | GitHub Actions | In progress (dbt run + test on push/PR) |
+| CI/CD | GitHub Actions | CI done (dbt run + test on push/PR, passing); no CD/deploy step |
 
-The repository is still at an early stage: the Docker Compose setup for local development (Airflow + Postgres) is in place, and an Airflow DAG runs daily to load stock prices and the USD/VND rate into the warehouse's raw tables and then build and test the dbt staging and mart models. A GitHub Actions workflow runs the dbt models and tests against a throwaway Postgres on every push and pull request. Power BI connects to the warehouse to report on the mart layer, and dbt docs are generated for the models.
+The pipeline works end to end: the Docker Compose setup for local development (Airflow + Postgres) is in place, and an Airflow DAG runs daily to load stock prices and the USD/VND rate into the warehouse's raw tables and then build and test the dbt staging and mart models. A GitHub Actions workflow runs the dbt models and tests against a throwaway Postgres on every push and pull request, and it passes on `main`. Power BI connects to the warehouse to report on the mart layer, and dbt docs are generated for the models.
 
 ## Repository Structure
 
@@ -173,9 +175,11 @@ The Docker stack must be running for Power BI to refresh.
 3. Creates the raw tables and loads a small fixture dataset from `dbt/tests/fixtures/seed_raw_data.sql`
 4. Runs `dbt deps`, `dbt run` and `dbt test`, pointing the profile at the service container via `WAREHOUSE_DB_*` variables
 
-The CI never calls vnstock or the Vietcombank feed, so it is fast and deterministic.
+The CI never calls vnstock or the Vietcombank feed, so it is fast (under a minute) and deterministic. Run results are on the repository's [Actions tab](https://github.com/anhkiet07/Finance-ELT-pipeline/actions/workflows/ci.yml). There is no CD step: the pipeline runs locally in Docker, so there is nothing to deploy yet.
 
-## Current Status & Roadmap
+## Project Status
+
+The project is complete up to CI with GitHub Actions and is no longer under active development. All planned phases are done:
 
 **Phase 0 — Repository setup**
 - [x] Initialize repository, add license
@@ -186,7 +190,6 @@ The CI never calls vnstock or the Vietcombank feed, so it is fast and determinis
 - [x] Set up Docker Compose (Airflow + Postgres)
 - [x] Build ingestion script for stock prices (vnstock) and USD/VND FX rate (Vietcombank)
 - [x] Load raw data into the Postgres raw layer (`raw_stock_price`, `raw_fx_rate`, idempotent upserts)
-- [ ] Parameterize the script (date range / incremental loads instead of hardcoded dates) and add error handling
 - [x] Orchestrate ingestion with an Airflow DAG (`finance_elt_ingest`, daily)
 
 **Phase 2 — Transformation**
@@ -200,9 +203,18 @@ The CI never calls vnstock or the Vietcombank feed, so it is fast and determinis
 **Phase 3 — BI & CI/CD**
 - [x] Connect Power BI to the mart layer
 - [x] Add GitHub Actions CI running `dbt run` + `dbt test` against fixture data
-- [ ] Add linting (e.g. SQLFluff, ruff) to CI
 
-This roadmap will be updated as each phase is completed.
+## Future Improvements
+
+Possible directions for extending the project:
+
+- **Incremental ingestion** — replace the hardcoded start date with a date range or incremental loads based on the latest `trade_date` in the warehouse, and add retry/error handling around the API calls.
+- **Historical FX data** — the Vietcombank feed only returns the current day's rate; a historical source would allow backfilling `raw_fx_rate` so older prices can be converted to USD.
+- **Self-contained dbt dependencies** — run `dbt deps` in the Airflow Dockerfile or as a DAG task, so `dbt_utils` does not have to be installed manually.
+- **Linting in CI** — add SQLFluff for the dbt models and ruff for the Python code.
+- **Continuous deployment** — build and push the Airflow image and deploy the stack to a cloud VM or managed service (e.g. a cloud-hosted Postgres and Airflow) instead of running only locally.
+- **Richer data** — more tickers and sectors, company fundamentals, or intraday data, with additional mart models for returns and volatility.
+- **Monitoring** — Airflow failure alerts (email/Slack) and dbt source freshness checks.
 
 ## Author / Contact
 

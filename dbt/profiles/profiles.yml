@@ -3,10 +3,11 @@ finance_elt:
   outputs:
     dev:
       type: postgres
-      host: warehouse-db
-      port: 5432
+      host: "{{ env_var('WAREHOUSE_DB_HOST', 'warehouse-db') }}"
+      port: "{{ env_var('WAREHOUSE_DB_PORT', '5432') | as_number }}"
       user: "{{ env_var('WAREHOUSE_DB_USER') }}"
       pass: "{{ env_var('WAREHOUSE_DB_PASSWORD') }}"
       dbname: "{{ env_var('WAREHOUSE_DB_NAME') }}"
       schema: staging
       threads: 4
+      

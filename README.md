@@ -22,24 +22,25 @@ Data flows through three layers, following a standard raw → staging → mart m
 
 | Layer | Tool | Status |
 |---|---|---|
-| Orchestration | Apache Airflow 2.9 | In progress (ingest → dbt run DAG in place) |
-| Transformation | dbt-core (dbt-postgres) | In progress |
+| Orchestration | Apache Airflow 2.9 | In progress (ingest → dbt run → dbt test DAG in place) |
+| Transformation | dbt-core (dbt-postgres, dbt_utils) | In progress (models + tests) |
 | Data ingestion | Python, [vnstock](https://github.com/thinh-vu/vnstock) | In progress |
 | Warehouse | PostgreSQL | In progress |
 | Local environment | Docker Compose | In progress |
 | BI / Visualization | Metabase or Power BI | Planned |
-| CI/CD | GitHub Actions | Planned |
+| CI/CD | GitHub Actions | In progress (dbt run + test on push/PR) |
 
-The repository is still at an early stage: the Docker Compose setup for local development (Airflow + Postgres) is in place, and an Airflow DAG runs daily to load stock prices and the USD/VND rate into the warehouse's raw tables and then run the dbt staging and mart models. The BI layer is not implemented yet.
+The repository is still at an early stage: the Docker Compose setup for local development (Airflow + Postgres) is in place, and an Airflow DAG runs daily to load stock prices and the USD/VND rate into the warehouse's raw tables and then build and test the dbt staging and mart models. A GitHub Actions workflow runs the dbt models and tests against a throwaway Postgres on every push and pull request. The BI layer is not implemented yet.
 
 ## Repository Structure
 
-`dags/`, `dbt/`, `scripts/` and `docker/` contain working code; `plugins/` is still an empty placeholder.
+`dags/`, `dbt/`, `scripts/`, `docker/` and `.github/` contain working code; `plugins/` is still an empty placeholder.
 
 ```
 finance-elt-pipeline/
-├── dags/       # Airflow DAGs (finance_elt_dag.py: daily ingest -> dbt run)
-├── dbt/        # dbt project: staging and mart models against the warehouse
+├── .github/    # GitHub Actions CI workflow (dbt run + dbt test)
+├── dags/       # Airflow DAGs (finance_elt_dag.py: daily ingest -> dbt run -> dbt test)
+├── dbt/        # dbt project: staging and mart models, tests and CI fixtures
 ├── docker/     # Docker Compose setup and custom Airflow image (Dockerfile)
 ├── plugins/    # Airflow plugins (empty)
 ├── scripts/    # Ingestion script (vnstock stock prices, VCB USD/VND rate) and requirements
@@ -83,13 +84,14 @@ The Airflow UI will be available at [http://localhost:8080](http://localhost:808
 
 ### Airflow DAG
 
-`dags/finance_elt_dag.py` defines the `finance_elt_ingest` DAG with two tasks in sequence:
+`dags/finance_elt_dag.py` defines the `finance_elt_ingest` DAG with three tasks in sequence:
 
 - Schedule: `@daily`, `catchup=False`
 - `ingest_stock_and_fx` (`PythonOperator`): creates the raw tables if needed, fetches prices for each ticker and the current USD/VND rate, and upserts them into the warehouse. It imports the functions from `scripts/ingest_stock.py`, so the logic lives in one place.
 - `dbt_run` (`BashOperator`): runs `dbt run` against the `dbt/` project, building the staging and mart models on top of the freshly loaded raw data.
+- `dbt_test` (`BashOperator`): runs `dbt test` to validate the models that were just built.
 
-`ingest_stock_and_fx >> dbt_run`, so the transform only runs after ingestion succeeds. New DAGs are paused by default: enable `finance_elt_ingest` in the UI and click **Trigger** to run it, or check that it parses with `docker exec airflow-scheduler airflow dags list-import-errors`.
+`ingest_stock_and_fx >> dbt_run >> dbt_test`, so the transform only runs after ingestion succeeds and the tests run on the freshly built models. New DAGs are paused by default: enable `finance_elt_ingest` in the UI and click **Trigger** to run it, or check that it parses with `docker exec airflow-scheduler airflow dags list-import-errors`.
 
 ### Running the ingestion script
 
@@ -118,16 +120,40 @@ The stock start date is currently hardcoded (in both the script and the DAG), an
 - **Staging** (`dbt/models/staging/`) — `stg_stock_price` and `stg_fx_rate` cast types and rename columns from the `raw_stock_price` / `raw_fx_rate` sources (declared in `_staging__sources.yml`)
 - **Marts** (`dbt/models/marts/`) — `mart_stock_usd` joins staged prices with the FX rate for the same date and adds a `close_price_usd` column
 
-The connection profile lives in `dbt/profiles/profiles.yml` and reads `WAREHOUSE_DB_*` from the environment, so it works both on the host and inside the Airflow containers (where `DBT_PROFILES_DIR` is set to `/opt/airflow/dbt/profiles`). To run it from the host:
+The connection profile lives in `dbt/profiles/profiles.yml` and reads `WAREHOUSE_DB_*` from the environment (`WAREHOUSE_DB_HOST` and `WAREHOUSE_DB_PORT` are optional and default to `warehouse-db` / `5432`), so it works both on the host and inside the Airflow containers (where `DBT_PROFILES_DIR` is set to `/opt/airflow/dbt/profiles`). To run it from the host:
 
 ```
 cd dbt
 export WAREHOUSE_DB_USER=... WAREHOUSE_DB_PASSWORD=... WAREHOUSE_DB_NAME=...  # from docker/.env
+export WAREHOUSE_DB_HOST=localhost WAREHOUSE_DB_PORT=5434
 export DBT_PROFILES_DIR=./profiles
+dbt deps
 dbt run
+dbt test
 ```
 
-There are no dbt tests or generated docs yet.
+The project depends on [dbt_utils](https://github.com/dbt-labs/dbt-utils) (`dbt/packages.yml`, pinned in `package-lock.yml`). `dbt_packages/` is git-ignored and the Airflow DAG does not run `dbt deps`, so run `dbt deps` once (on the host, or with `docker exec airflow-scheduler bash -c "cd /opt/airflow/dbt && dbt deps"`) before the first DAG run; since `dbt/` is mounted into the containers, the installed packages are shared.
+
+#### dbt tests
+
+Tests are declared next to the models in `_staging__models.yml` and `_marts__models.yml`:
+
+- `stg_stock_price` — `not_null` on `ticker`, `trade_date`, `close_price`; `ticker, trade_date` unique together (`dbt_utils.unique_combination_of_columns`)
+- `stg_fx_rate` — `rate_date` `not_null` and `unique`; `usd_vnd_rate` `not_null`
+- `mart_stock_usd` — `ticker` `not_null`; `ticker, trade_date` unique together
+
+dbt docs have not been generated yet.
+
+### CI (GitHub Actions)
+
+`.github/workflows/ci.yml` runs on every push and pull request to `main`:
+
+1. Starts a `postgres:16-alpine` service container as a throwaway warehouse
+2. Installs `dbt-postgres==1.11.0` (same version as the Airflow image)
+3. Creates the raw tables and loads a small fixture dataset from `dbt/tests/fixtures/seed_raw_data.sql`
+4. Runs `dbt deps`, `dbt run` and `dbt test`, pointing the profile at the service container via `WAREHOUSE_DB_*` variables
+
+The CI never calls vnstock or the Vietcombank feed, so it is fast and deterministic.
 
 ## Current Status & Roadmap
 
@@ -148,11 +174,13 @@ There are no dbt tests or generated docs yet.
 - [x] Build staging models (typing, cleaning, deduplication)
 - [x] Build mart models (price + FX joins)
 - [x] Wire `dbt run` into the Airflow DAG after ingestion
-- [ ] Add dbt tests and generate dbt docs
+- [x] Add dbt tests (`not_null`, `unique`, `dbt_utils` composite keys) and run `dbt test` in the DAG
+- [ ] Generate dbt docs
 
 **Phase 3 — BI & CI/CD**
 - [ ] Connect Metabase or Power BI to the mart layer
-- [ ] Add GitHub Actions for CI (linting, dbt tests)
+- [x] Add GitHub Actions CI running `dbt run` + `dbt test` against fixture data
+- [ ] Add linting (e.g. SQLFluff, ruff) to CI
 
 This roadmap will be updated as each phase is completed.
 

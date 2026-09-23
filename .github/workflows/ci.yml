@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  dbt-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: warehouse
+          POSTGRES_PASSWORD: warehouse
+          POSTGRES_DB: finance_dw
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dbt
+        run: pip install dbt-postgres==1.11.0
+
+      - name: Seed fixture data
+        run: |
+          PGPASSWORD=warehouse psql -h localhost -U warehouse -d finance_dw -f dbt/tests/fixtures/seed_raw_data.sql
+
+      - name: dbt deps
+        working-directory: dbt
+        run: dbt deps
+
+      - name: dbt run
+        working-directory: dbt
+        run: dbt run
+        env:
+          WAREHOUSE_DB_HOST: localhost
+          WAREHOUSE_DB_PORT: "5432"
+          WAREHOUSE_DB_USER: warehouse
+          WAREHOUSE_DB_PASSWORD: warehouse
+          WAREHOUSE_DB_NAME: finance_dw
+          DBT_PROFILES_DIR: profiles
+
+      - name: dbt test
+        working-directory: dbt
+        run: dbt test
+        env:
+          WAREHOUSE_DB_HOST: localhost
+          WAREHOUSE_DB_PORT: "5432"

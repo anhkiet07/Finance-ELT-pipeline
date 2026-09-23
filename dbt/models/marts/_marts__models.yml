@@ -1,0 +1,14 @@
+version: 2
+
+models:
+  - name: mart_stock_usd
+    columns:
+      - name: ticker
+        tests:
+          - not_null
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - ticker
+              - trade_date
